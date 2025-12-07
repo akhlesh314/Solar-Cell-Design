@@ -6,14 +6,14 @@ from io import StringIO
 from openai import OpenAI
 
 # ============================================================
-# 1. Load API Key from Render Environment Variables
+# Load API Key from Render Environment Variables
 # ============================================================
 api_key = os.getenv("OPENAI_API_KEY")
 
 if not api_key:
     st.error(
         "❌ OPENAI_API_KEY not found.\n\n"
-        "You must set it in Render → Environment → Environment Variables."
+        "Set it in Render → Environment → Environment Variables."
     )
     st.stop()
 
@@ -22,93 +22,102 @@ client = OpenAI(api_key=api_key)
 # ============================================================
 # Streamlit UI
 # ============================================================
-st.set_page_config(page_title="Agentic AI Data Analysis Bot", layout="wide")
+st.set_page_config(
+    page_title="Agentic AI Data Analysis Bot",
+    layout="wide"
+)
+
 st.title("📊 Agentic AI Data Analysis Bot")
 
 st.write(
     """
-    Upload a CSV file and let the agent produce an end-to-end ML analysis pipeline  
-    including cleaning, feature engineering, model selection, Python code, and evaluation.
+    Upload a CSV dataset, and this agent will build an **end-to-end machine learning plan**  
+    including **data cleaning**, **feature engineering**, **model selection**,  
+    **Python code**, and **evaluation strategy**—all generated using a  
+    PEACE-structured LLM prompt.
     """
 )
 
 uploaded_file = st.file_uploader("Upload your CSV dataset", type=["csv"])
 
+# ============================================================
+# Process CSV Upload
+# ============================================================
 if uploaded_file:
-    # ============================================================
-    # Read CSV
-    # ============================================================
+
     df = pd.read_csv(uploaded_file)
+
+    # ---- Preview ----
     st.subheader("📄 Dataset Preview")
     st.dataframe(df.head())
 
-    # Display df.info()
+    # ---- Show df.info() ----
     buffer = StringIO()
     df.info(buf=buffer)
     info_str = buffer.getvalue()
 
-    # Summary statistics
+    # ---- Summary ----
     st.subheader("📊 Dataset Summary")
     st.write(df.describe(include="all"))
 
     # ============================================================
-    # Construct PEACE Prompt
+    # Build the PEACE Prompt
     # ============================================================
     st.subheader("🤖 Running Agentic Dataset Analysis…")
 
     dataset_summary = f"""
-    DATA HEAD:
-    {df.head().to_string()}
+DATA HEAD:
+{df.head().to_string()}
 
-    DATA INFO:
-    {info_str}
+DATA INFO:
+{info_str}
 
-    SUMMARY:
-    {df.describe(include="all").to_string()}
-    """
+SUMMARY:
+{df.describe(include="all").to_string()}
+"""
 
     peace_prompt = f"""
 P — PURPOSE:
-You are a senior data scientist. Analyze the uploaded dataset thoroughly and produce
-a full ML workflow ready for implementation.
+You are a senior data scientist. Analyze the uploaded dataset and generate
+a complete machine-learning pipeline proposal.
 
 E — EXPECTATIONS:
 Provide:
-1. Data cleaning steps  
-2. Feature engineering strategy  
-3. Determine if the task is regression or classification  
-4. Select appropriate ML models  
-5. Provide COMPLETE Python code using:
+1. Data cleaning steps
+2. Feature engineering strategy
+3. Determination of task type (regression/classification).  
+   If unclear, state your assumption clearly.
+4. Recommended ML algorithm(s) and rationale
+5. Full Python code using:
    - pandas
    - scikit-learn
    - matplotlib
-6. Explain evaluation metrics and how to interpret them  
-7. Ensure the explanation is academically sound and reproducible.
+6. Explanation of evaluation metrics and interpretation
 
 A — ACTIONS:
-- Examine the dataset summary provided
-- Reason about transformations
-- Identify the target variable (state assumptions if unsure)
-- Suggest the best algorithms
-- Generate full executable Python code
-- Provide evaluation guidance
+- Examine dataset summary
+- Identify transformations needed
+- Recommend the ML approach
+- Produce complete executable Python code
+- Provide metrics explanation
 
 C — CONSTRAINTS:
-- DO NOT hallucinate columns or features
-- Only reference real columns in the dataset
-- Do not assume the task type; state an assumption if needed
-- Do not fabricate metric values — only provide code
+- DO NOT hallucinate columns, features, or values
+- Only use columns that appear in the dataset
+- If unsure about task type, state the assumption
+- Do not fabricate metric values; only provide code
 
 E — EVALUATION:
-Your final output must be:
-- Correct and logically consistent
+Your output must be:
+- Technically correct
+- Logically consistent
 - Structured into sections:
-    * Cleaning
+    * Data Cleaning
     * Feature Engineering
     * Model Selection
     * Full Python Code
     * Evaluation Strategy
-- Reproducible by a graduate student in Python
+- Reproducible by a graduate-level student
 
 ===========================
 DATASET SUMMARY BELOW
@@ -117,28 +126,36 @@ DATASET SUMMARY BELOW
 """
 
     # ============================================================
-    # Call OpenAI
+    # OpenAI API Call
     # ============================================================
     try:
         response = client.chat.completions.create(
             model="gpt-4.1",
-            messages=[{"role": "user", "content": peace_prompt}],
+            messages=[{
+                "role": "user",
+                "content": peace_prompt
+            }],
             temperature=0.2,
         )
-        report = response.choices[0].message["content"]
+
+        # FIXED: Use attribute access, NOT dictionary access
+        report = response.choices[0].message.content
 
     except Exception as e:
-        st.error(f"❌ OpenAI API Error: {e}")
+        st.error(f"❌ OpenAI API Error:\n{e}")
         st.stop()
 
+    # ============================================================
+    # Display Results
+    # ============================================================
     st.subheader("📘 Full AI-Generated Analysis Report")
     st.write(report)
 
     # ============================================================
-    # Option to Download Report
+    # Download Report
     # ============================================================
     st.download_button(
-        label="📥 Download Report",
+        label="📥 Download Report as TXT",
         data=report,
         file_name="analysis_report.txt",
         mime="text/plain"
